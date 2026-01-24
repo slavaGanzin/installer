@@ -34,7 +34,7 @@ var (
 
 type Query struct {
 	User, Program, Release       string
-	AsProgram, Select            string
+	AsProgram, Filter, Select    string
 	MoveToPath, Search, Insecure bool
 	SudoMove                     bool   // deprecated: not used, now automatically detected
 	OS, Arch                     string // override OS and Arch
@@ -130,6 +130,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Release:   "",
 		Insecure:  r.URL.Query().Get("insecure") == "1",
 		AsProgram: r.URL.Query().Get("as"),
+		Filter:    r.URL.Query().Get("filter"),
 		Select:    r.URL.Query().Get("select"),
 		OS:        r.URL.Query().Get("os"),
 		Arch:      r.URL.Query().Get("arch"),

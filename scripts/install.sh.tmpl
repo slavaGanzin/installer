@@ -18,10 +18,11 @@ function install {
 	USER="{{ .User }}"
 	PROG="{{ .Program }}"
 	ASPROG="{{ .AsProgram }}"
+	FILTER="{{ .Filter }}"
 	MOVE="{{ .MoveToPath }}"
 	RELEASE="{{ .Release }}" # {{ .ResolvedRelease }}
 	INSECURE="{{ .Insecure }}"
-	OUT_DIR="{{ if .MoveToPath }}/usr/local/bin{{ else }}$(pwd){{ end }}"
+	OUT_DIR="${OUT_DIR:-{{ if .MoveToPath }}/usr/local/bin{{ else }}$(pwd){{ end }}}"
 	GH="https://github.com"
 	#bash check
 	[ ! "$BASH_VERSION" ] && fail "Please use bash instead"
@@ -155,10 +156,22 @@ function install {
 	else
 		fail "unknown file type: $FTYPE"
 	fi
-	#search subtree largest file (bin)
-	TMP_BIN=$(find . -type f | xargs du | sort -n | tail -n 1 | cut -f 2)
+	#search for binary
+	TMP_BIN=""
+	# if ASPROG is set, try to find file matching that name first
+	if [ ! -z "$ASPROG" ]; then
+		TMP_BIN=$(find . -type f -name "$ASPROG" | head -n 1)
+	fi
+	# if FILTER is set, find largest file matching the filter pattern
+	if [ -z "$TMP_BIN" ] || [ ! -f "$TMP_BIN" ]; then
+		if [ ! -z "$FILTER" ]; then
+			TMP_BIN=$(find . -type f -name "*${FILTER}*" | xargs du | sort -n | tail -n 1 | cut -f 2)
+		else
+			TMP_BIN=$(find . -type f | xargs du | sort -n | tail -n 1 | cut -f 2)
+		fi
+	fi
 	if [ ! -f "$TMP_BIN" ]; then
-		fail "could not find find binary (largest file)"
+		fail "could not find binary"
 	fi
 	#ensure its larger than 1MB
 	#TODO linux=elf/darwin=macho file detection?
