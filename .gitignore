@@ -35,3 +35,6 @@ go.work.sum
 .gopath/
 tmp/
 test.sh
+
+# DevSpace local cache
+.devspace/
