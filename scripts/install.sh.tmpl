@@ -180,23 +180,82 @@ function install {
 	fi
 	#move into PATH or cwd
 	chmod +x $TMP_BIN || fail "chmod +x failed"
-	DEST="$OUT_DIR/$PROG"	
+	DEST="$OUT_DIR/$PROG"
 	if [ ! -z "$ASPROG" ]; then
 		DEST="$OUT_DIR/$ASPROG"
 	fi
-	#move without sudo
+
+	#try move without sudo
 	OUT=$(mv $TMP_BIN $DEST 2>&1)
 	STATUS=$?
-	# failed and string contains "Permission denied"
+
 	if [ $STATUS -ne 0 ]; then
 		if [[ $OUT =~ "Permission denied" ]]; then
-			echo "mv with sudo..."
-			sudo mv $TMP_BIN $DEST || fail "sudo mv failed" 
+			# Try ~/.local/bin as fallback
+			LOCAL_BIN="$HOME/.local/bin"
+			mkdir -p "$LOCAL_BIN" 2>/dev/null
+
+			DEST="$LOCAL_BIN/$PROG"
+			if [ ! -z "$ASPROG" ]; then
+				DEST="$LOCAL_BIN/$ASPROG"
+			fi
+
+			OUT=$(mv $TMP_BIN $DEST 2>&1)
+			STATUS=$?
+
+			if [ $STATUS -ne 0 ]; then
+				fail "Failed to install to $LOCAL_BIN: $OUT"
+			fi
+
+			# Add to PATH if not already there
+			ADDED_TO_PATH=false
+			if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
+				# Add to shell config files
+				for rcfile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
+					if [ -f "$rcfile" ] || [ "$rcfile" = "$HOME/.bashrc" ] || [ "$rcfile" = "$HOME/.zshrc" ]; then
+						# For fish shell, use fish syntax
+						if [[ $rcfile == *"fish"* ]]; then
+							if [ -f "$rcfile" ]; then
+								if ! grep -q "fish_add_path.*\.local/bin" "$rcfile"; then
+									echo "" >> "$rcfile"
+									echo "# Added by installer" >> "$rcfile"
+									echo "fish_add_path $LOCAL_BIN" >> "$rcfile"
+									ADDED_TO_PATH=true
+								fi
+							fi
+						else
+							# For bash/zsh
+							mkdir -p "$(dirname "$rcfile")"
+							if ! grep -q "\.local/bin" "$rcfile"; then
+								echo "" >> "$rcfile"
+								echo "# Added by installer" >> "$rcfile"
+								echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$rcfile"
+								ADDED_TO_PATH=true
+							fi
+						fi
+					fi
+				done
+			fi
+
+			echo "Installed at $DEST"
+			if [ "$ADDED_TO_PATH" = true ]; then
+				echo ""
+				echo "Added ~/.local/bin to PATH in shell config files."
+				echo "Run: source ~/.bashrc (or ~/.zshrc) to update current shell"
+				echo "Or restart your terminal."
+			elif ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
+				echo ""
+				echo "⚠️  ~/.local/bin is not in your PATH"
+				echo "Add this to your ~/.bashrc or ~/.zshrc:"
+				echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+			fi
 		else
 			fail "mv failed ($OUT)"
 		fi
+	else
+		echo "{{ if .MoveToPath }}Installed at{{ else }}Downloaded to{{ end }} $DEST"
 	fi
-	echo "{{ if .MoveToPath }}Installed at{{ else }}Downloaded to{{ end }} $DEST"
+
 	#done
 	cleanup
 }
