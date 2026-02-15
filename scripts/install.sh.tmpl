@@ -191,50 +191,86 @@ function install {
 
 	if [ $STATUS -ne 0 ]; then
 		if [[ $OUT =~ "Permission denied" ]]; then
-			# Try ~/.local/bin as fallback
-			LOCAL_BIN="$HOME/.local/bin"
-			mkdir -p "$LOCAL_BIN" 2>/dev/null
+			# Make a backup of the binary to try multiple locations
+			cp $TMP_BIN $TMP_BIN.backup
 
-			DEST="$LOCAL_BIN/$PROG"
-			if [ ! -z "$ASPROG" ]; then
-				DEST="$LOCAL_BIN/$ASPROG"
-			fi
+			# Try to install to any existing PATH directory
+			INSTALLED=false
+			IFS=':' read -ra PATH_DIRS <<< "$PATH"
+			for PATH_DIR in "${PATH_DIRS[@]}"; do
+				# Skip empty, relative paths, and the original failed directory
+				if [ -z "$PATH_DIR" ] || [[ "$PATH_DIR" != /* ]] || [ "$PATH_DIR" = "$OUT_DIR" ]; then
+					continue
+				fi
 
-			OUT=$(mv $TMP_BIN $DEST 2>&1)
-			STATUS=$?
+				# Try this PATH directory
+				DEST="$PATH_DIR/$PROG"
+				if [ ! -z "$ASPROG" ]; then
+					DEST="$PATH_DIR/$ASPROG"
+				fi
 
-			if [ $STATUS -ne 0 ]; then
-				fail "Failed to install to $LOCAL_BIN: $OUT"
-			fi
+				OUT=$(mv $TMP_BIN $DEST 2>&1)
+				STATUS=$?
 
-			# Add to PATH if not already there
-			ADDED_TO_PATH=false
-			if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
-				# Add to shell config files
-				for rcfile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
-					if [ -f "$rcfile" ] || [ "$rcfile" = "$HOME/.bashrc" ] || [ "$rcfile" = "$HOME/.zshrc" ]; then
-						# For fish shell, use fish syntax
-						if [[ $rcfile == *"fish"* ]]; then
-							if [ -f "$rcfile" ]; then
-								if ! grep -q "fish_add_path.*\.local/bin" "$rcfile"; then
+				if [ $STATUS -eq 0 ]; then
+					INSTALLED=true
+					rm -f $TMP_BIN.backup
+					break
+				fi
+
+				# Restore binary for next attempt
+				cp $TMP_BIN.backup $TMP_BIN
+			done
+
+			# Clean up backup if we haven't already
+			rm -f $TMP_BIN.backup
+
+			# If no PATH directory worked, fallback to ~/.local/bin
+			if [ "$INSTALLED" = false ]; then
+				LOCAL_BIN="$HOME/.local/bin"
+				mkdir -p "$LOCAL_BIN" 2>/dev/null
+
+				DEST="$LOCAL_BIN/$PROG"
+				if [ ! -z "$ASPROG" ]; then
+					DEST="$LOCAL_BIN/$ASPROG"
+				fi
+
+				OUT=$(mv $TMP_BIN $DEST 2>&1)
+				STATUS=$?
+
+				if [ $STATUS -ne 0 ]; then
+					fail "Failed to install to $LOCAL_BIN: $OUT"
+				fi
+
+				# Add to PATH if not already there
+				ADDED_TO_PATH=false
+				if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
+					# Add to shell config files
+					for rcfile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
+						if [ -f "$rcfile" ] || [ "$rcfile" = "$HOME/.bashrc" ] || [ "$rcfile" = "$HOME/.zshrc" ]; then
+							# For fish shell, use fish syntax
+							if [[ $rcfile == *"fish"* ]]; then
+								if [ -f "$rcfile" ]; then
+									if ! grep -q "fish_add_path.*\.local/bin" "$rcfile"; then
+										echo "" >> "$rcfile"
+										echo "# Added by installer" >> "$rcfile"
+										echo "fish_add_path $LOCAL_BIN" >> "$rcfile"
+										ADDED_TO_PATH=true
+									fi
+								fi
+							else
+								# For bash/zsh
+								mkdir -p "$(dirname "$rcfile")"
+								if ! grep -q "\.local/bin" "$rcfile"; then
 									echo "" >> "$rcfile"
 									echo "# Added by installer" >> "$rcfile"
-									echo "fish_add_path $LOCAL_BIN" >> "$rcfile"
+									echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$rcfile"
 									ADDED_TO_PATH=true
 								fi
 							fi
-						else
-							# For bash/zsh
-							mkdir -p "$(dirname "$rcfile")"
-							if ! grep -q "\.local/bin" "$rcfile"; then
-								echo "" >> "$rcfile"
-								echo "# Added by installer" >> "$rcfile"
-								echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$rcfile"
-								ADDED_TO_PATH=true
-							fi
 						fi
-					fi
-				done
+					done
+				fi
 			fi
 
 			echo "Installed at $DEST"
