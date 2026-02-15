@@ -38,3 +38,10 @@ test.sh
 
 # DevSpace local cache
 .devspace/
+
+# Python
+__pycache__/
+*.pyc
+
+# Built binary
+installer

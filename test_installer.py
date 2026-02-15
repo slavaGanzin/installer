@@ -29,7 +29,9 @@ def test_installer_script_has_path_fallback():
     try:
         # Fetch the install script
         print("Fetching install script from server...")
-        response = requests.get("http://localhost:8765/help-me-test/cli?type=script", timeout=10)
+        response = requests.get(
+            "http://localhost:8765/help-me-test/cli?type=script", timeout=10
+        )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
         script = response.text
