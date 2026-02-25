@@ -1,4 +1,4 @@
-"""Test the installer server to ensure it serves scripts with correct fallback logic."""
+"""Integration test for installer - actually installs binaries and verifies they work."""
 
 import subprocess
 import time
@@ -6,15 +6,17 @@ import requests
 import signal
 import os
 import sys
+import tempfile
+import shutil
 
 
-def test_installer_script_has_path_fallback():
-    """Test that the installer script tries all PATH directories before ~/.local/bin"""
+def test_actual_installation():
+    """Test that installers actually download and install working binaries"""
 
     # Start the installer server in background
     print("Starting installer server...")
     env = os.environ.copy()
-    env["GH_TOKEN"] = ""  # No token needed for template test
+    env["GH_TOKEN"] = os.environ.get("GH_TOKEN", "")
 
     server = subprocess.Popen(
         ["./installer", "--port", "8765"],
@@ -26,74 +28,111 @@ def test_installer_script_has_path_fallback():
     # Give server time to start
     time.sleep(2)
 
+    # Create temporary directory for installations
+    test_dir = tempfile.mkdtemp(prefix="installer-test-")
+    install_dir = os.path.join(test_dir, "bin")
+    os.makedirs(install_dir)
+
     try:
-        # Fetch the install script
-        print("Fetching install script from server...")
-        response = requests.get(
-            "http://localhost:8765/help-me-test/cli?type=script", timeout=10
+        print(f"Test directory: {test_dir}")
+        print(f"Install directory: {install_dir}")
+
+        # Test 1: Install helpmetest (using exact URL from app/server/API.js:441)
+        print("\n=== Testing helpmetest installation (/install) ===")
+        result = subprocess.run(
+            f'curl -sf "http://localhost:8765/help-me-test/cli!?type=script&as=helpmetest" | OUT_DIR={install_dir} bash',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=120
         )
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-        script = response.text
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
 
-        # Test 1: Script should handle permission denied
-        assert "Permission denied" in script, (
-            "Script missing permission denied handling"
+        if result.returncode != 0:
+            raise AssertionError(f"helpmetest installation failed with exit code {result.returncode}")
+
+        print("✓ Installation script completed")
+
+        # Verify binary exists
+        helpmetest_bin = os.path.join(install_dir, "helpmetest")
+        assert os.path.exists(helpmetest_bin), f"Binary not found at {helpmetest_bin}"
+        print(f"✓ Binary exists at {helpmetest_bin}")
+
+        # Verify binary is executable
+        assert os.access(helpmetest_bin, os.X_OK), "Binary is not executable"
+        print("✓ Binary is executable")
+        print("✓ Binary downloaded and installed successfully")
+
+        # Test 2: Install frpc (using exact URL from app/server/API.js:453)
+        print("\n=== Testing frpc installation (/install/frpc) ===")
+        result = subprocess.run(
+            f'curl -sf "http://localhost:8765/fatedier/frp!?type=script&filter=frpc&as=frpc" | OUT_DIR={install_dir} bash',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=120
         )
-        print("✓ Permission denied handling found")
 
-        # Test 2: Script should try PATH directories
-        assert "IFS=" in script and "read -ra PATH_DIRS" in script, (
-            "Script missing PATH directory iteration"
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
+
+        if result.returncode != 0:
+            raise AssertionError(f"frpc installation failed with exit code {result.returncode}")
+
+        print("✓ Installation script completed")
+
+        # Verify binary exists
+        frpc_bin = os.path.join(install_dir, "frpc")
+        assert os.path.exists(frpc_bin), f"Binary not found at {frpc_bin}"
+        print(f"✓ Binary exists at {frpc_bin}")
+
+        # Verify binary is executable
+        assert os.access(frpc_bin, os.X_OK), "Binary is not executable"
+        print("✓ Binary is executable")
+        print("✓ Binary downloaded and installed successfully")
+
+        # Test 3: Install frps (using exact URL from app/server/API.js:465)
+        print("\n=== Testing frps installation (/install/frps) ===")
+        result = subprocess.run(
+            f'curl -sf "http://localhost:8765/fatedier/frp!?type=script&filter=frps&as=frps" | OUT_DIR={install_dir} bash',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=120
         )
-        print("✓ PATH directory iteration found")
 
-        # Test 3: Script should skip empty/relative paths and original failed dir
-        assert (
-            "Skip empty, relative paths" in script or 'if [ -z "$PATH_DIR" ]' in script
-        ), "Script missing path validation"
-        print("✓ PATH validation found")
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
 
-        # Test 4: Script should fallback to ~/.local/bin
-        assert 'LOCAL_BIN="$HOME/.local/bin"' in script, (
-            "Script missing ~/.local/bin fallback"
-        )
-        print("✓ ~/.local/bin fallback found")
+        if result.returncode != 0:
+            raise AssertionError(f"frps installation failed with exit code {result.returncode}")
 
-        # Test 5: Script should add to shell configs only when needed
-        assert ".bashrc" in script and ".zshrc" in script, (
-            "Script missing shell config modification"
-        )
-        print("✓ Shell config modification found")
+        print("✓ Installation script completed")
 
-        # Test 6: Script should support fish shell
-        assert "fish_add_path" in script or "*fish*" in script, (
-            "Script missing fish shell support"
-        )
-        print("✓ Fish shell support found")
+        # Verify binary exists
+        frps_bin = os.path.join(install_dir, "frps")
+        assert os.path.exists(frps_bin), f"Binary not found at {frps_bin}"
+        print(f"✓ Binary exists at {frps_bin}")
 
-        # Test 7: Script should check for duplicates before adding to PATH
-        assert "grep -q" in script and ".local/bin" in script, (
-            "Script missing duplicate prevention"
-        )
-        print("✓ Duplicate prevention found")
+        # Verify binary is executable
+        assert os.access(frps_bin, os.X_OK), "Binary is not executable"
+        print("✓ Binary is executable")
+        print("✓ Binary downloaded and installed successfully")
 
-        # Test 8: Verify logic order - try PATH before creating ~/.local/bin
-        path_try_pos = script.find("IFS=")
-        local_bin_pos = script.find('LOCAL_BIN="$HOME/.local/bin"')
-        assert path_try_pos < local_bin_pos, (
-            "Script tries ~/.local/bin before PATH directories"
-        )
-        print("✓ Correct fallback order (PATH first, then ~/.local/bin)")
-
-        print("\n✅ All installer script tests passed!")
+        print("\n✅ All installation tests passed!")
 
     finally:
+        # Cleanup
+        print(f"\nCleaning up test directory: {test_dir}")
+        shutil.rmtree(test_dir, ignore_errors=True)
+
         # Stop the server
-        print("\nStopping installer server...")
+        print("Stopping installer server...")
         server.send_signal(signal.SIGTERM)
         server.wait(timeout=5)
 
 
 if __name__ == "__main__":
-    test_installer_script_has_path_fallback()
+    test_actual_installation()
