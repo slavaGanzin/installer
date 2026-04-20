@@ -37,7 +37,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("listening on %s...", addr)
-	h := &handler.Handler{Config: c}
+	h := &handler.Handler{Config: c, Client: &http.Client{Timeout: 30 * time.Second}}
 	lh := requestlog.New(h, requestlog.Options{
 		TrustProxy: true, // assume will be run in paas
 		Filter: func(r *http.Request, code int, duration time.Duration, size int64) bool {

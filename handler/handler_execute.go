@@ -236,6 +236,8 @@ func (h *Handler) getAssetsNoCache(q Query) (string, Assets, error) {
 
 type ghAssets []ghAsset
 
+var sumClient = &http.Client{Timeout: 30 * time.Second}
+
 func (as ghAssets) getSumIndex() (map[string]string, error) {
 	url := ""
 	for _, ga := range as {
@@ -248,7 +250,7 @@ func (as ghAssets) getSumIndex() (map[string]string, error) {
 	if url == "" {
 		return nil, errors.New("no sum file found")
 	}
-	resp, err := http.DefaultClient.Get(url)
+	resp, err := sumClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

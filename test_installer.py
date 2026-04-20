@@ -44,7 +44,7 @@ def test_actual_installation():
             shell=True,
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=600
         )
 
         print(f"STDOUT:\n{result.stdout}")
@@ -72,7 +72,7 @@ def test_actual_installation():
             shell=True,
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=600
         )
 
         print(f"STDOUT:\n{result.stdout}")
@@ -100,7 +100,7 @@ def test_actual_installation():
             shell=True,
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=600
         )
 
         print(f"STDOUT:\n{result.stdout}")
